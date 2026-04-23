@@ -1,0 +1,7 @@
+streamlit
+numpy
+scikit-learn
+openai
+pandas
+pypdf
+faiss-cpu

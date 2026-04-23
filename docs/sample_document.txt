@@ -1,0 +1,3 @@
+Academic City Chatbot Sample Document
+This sample document exists to start the chatbot.
+Ask the bot about the Academic City Chatbot or describe your own data to use it.
