@@ -16,6 +16,7 @@ from rag_core import RAGChatbot, _clean_api_key
 
 @st.cache_resource(show_spinner="Loading index…")
 def get_bot(strategy: str, _llm_bind: int = 0) -> RAGChatbot:
+    # Force cache refresh by using _llm_bind parameter
     return RAGChatbot(docs_path="docs", strategy=strategy, top_k=3)
 
 
@@ -485,6 +486,160 @@ if logs:
                 st.toast("Thanks — saved.")
 
 st.divider()
+
+# Manual Logs & Experiments Section
+with st.expander("📊 Manual Logs & Experiments", expanded=False):
+    # Initialize session state variables
+    if 'current_experiment' not in st.session_state:
+        st.session_state.current_experiment = None
+    
+    tab1, tab2, tab3, tab4 = st.tabs(["📝 Manual Logs", "🧪 Experiments", "💬 Chat History", "📋 View Logs"])
+    
+    with tab1:
+        st.subheader("Add Manual Log")
+        log_level = st.selectbox("Log Level", ["INFO", "WARNING", "ERROR", "DEBUG"])
+        log_category = st.selectbox("Category", ["general", "manual", "debug", "performance"])
+        log_message = st.text_area("Message", height=100, placeholder="Enter your log message here...")
+        
+        if st.button("Add Log", use_container_width=True):
+            if log_message.strip():
+                bot = get_bot(strategy, st.session_state.llm_bind)
+                bot.log_manager.add_log(log_level, log_message, log_category)
+                st.success(f"Log added: [{log_level}] {log_message}")
+                st.rerun()
+            else:
+                st.error("Please enter a log message.")
+    
+    with tab2:
+        st.subheader("Experiment Management")
+        
+        # Start New Experiment
+        with st.expander("Start New Experiment", expanded=False):
+            exp_name = st.text_input("Experiment Name")
+            exp_description = st.text_area("Description", height=80)
+            exp_params = st.text_area("Parameters (JSON format)", height=60, placeholder='{"param1": "value1", "param2": "value2"}')
+            
+            if st.button("Start Experiment", use_container_width=True):
+                if exp_name.strip() and exp_description.strip():
+                    try:
+                        import json
+                        params = json.loads(exp_params) if exp_params.strip() else {}
+                        bot = get_bot(strategy, st.session_state.llm_bind)
+                        exp_id = bot.start_experiment(exp_name, exp_description, params)
+                        st.session_state.current_experiment = exp_id
+                        st.success(f"Experiment started: {exp_name} (ID: {exp_id})")
+                        st.rerun()
+                    except json.JSONDecodeError:
+                        st.error("Invalid JSON format for parameters")
+                else:
+                    st.error("Please enter experiment name and description")
+        
+        # Current Experiment Status
+        if st.session_state.current_experiment:
+            st.info(f"🧪 Active Experiment: {st.session_state.current_experiment}")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("End Experiment (Completed)", use_container_width=True):
+                    bot = get_bot(strategy, st.session_state.llm_bind)
+                    bot.end_experiment("completed")
+                    st.session_state.current_experiment = None
+                    st.success("Experiment marked as completed")
+                    st.rerun()
+            with col2:
+                if st.button("End Experiment (Failed)", use_container_width=True):
+                    bot = get_bot(strategy, st.session_state.llm_bind)
+                    bot.end_experiment("failed")
+                    st.session_state.current_experiment = None
+                    st.warning("Experiment marked as failed")
+                    st.rerun()
+        
+        # View All Experiments
+        with st.expander("View All Experiments", expanded=False):
+            bot = get_bot(strategy, st.session_state.llm_bind)
+            experiments = bot.experiment_manager.list_experiments()
+            
+            if experiments:
+                for exp in experiments:
+                    status_icon = "✅" if exp.status == "completed" else "🔄" if exp.status == "active" else "❌"
+                    st.write(f"{status_icon} **{exp.name}** ({exp.id})")
+                    st.caption(f"Status: {exp.status} | Created: {exp.created_at}")
+                    st.caption(f"Description: {exp.description}")
+                    if exp.results:
+                        with st.expander(f"Results ({len(exp.results)} metrics)", expanded=False):
+                            st.json(exp.results)
+                    st.divider()
+            else:
+                st.info("No experiments found.")
+    
+    with tab3:
+        st.subheader("Chat History")
+        bot = get_bot(strategy, st.session_state.llm_bind)
+        history = bot.chat_history
+        
+        if history:
+            st.write(f"Total messages: {len(history)}")
+            
+            # Clear history button
+            col1, col2 = st.columns([3, 1])
+            with col2:
+                if st.button("Clear History", use_container_width=True):
+                    bot.clear_history()
+                    st.success("Chat history cleared")
+                    st.rerun()
+            
+            # Display history
+            for i, msg in enumerate(reversed(history[-20:])):  # Show last 20 messages
+                role_icon = "👤" if msg.role == "user" else "🤖"
+                st.write(f"{role_icon} **{msg.role.title()}** - {msg.timestamp}")
+                st.write(msg.content)
+                st.divider()
+        else:
+            st.info("No chat history yet.")
+    
+    with tab4:
+        st.subheader("View Logs")
+        bot = get_bot(strategy, st.session_state.llm_bind)
+        
+        # Filter options
+        col1, col2 = st.columns(2)
+        with col1:
+            filter_category = st.selectbox("Filter by Category", ["all", "general", "system", "chat", "query", "experiment", "manual"])
+        with col2:
+            filter_level = st.selectbox("Filter by Level", ["all", "INFO", "WARNING", "ERROR", "DEBUG"])
+        
+        # Get filtered logs
+        logs = bot.log_manager.get_logs()
+        if filter_category != "all":
+            logs = [log for log in logs if log.category == filter_category]
+        if filter_level != "all":
+            logs = [log for log in logs if log.level == filter_level]
+        
+        if logs:
+            st.write(f"Showing {len(logs)} logs")
+            
+            # Clear logs button
+            if st.button("Clear All Logs", use_container_width=True):
+                bot.log_manager.clear_logs()
+                st.success("All logs cleared")
+                st.rerun()
+            
+            # Display logs
+            for log in reversed(logs[-50:]):  # Show last 50 logs
+                level_color = {
+                    "INFO": "🔵",
+                    "WARNING": "🟡", 
+                    "ERROR": "🔴",
+                    "DEBUG": "⚪"
+                }.get(log.level, "⚪")
+                
+                st.write(f"{level_color} **{log.level}** [{log.category}] - {log.timestamp}")
+                st.write(log.message)
+                if log.experiment_id:
+                    st.caption(f"Experiment: {log.experiment_id}")
+                st.divider()
+        else:
+            st.info("No logs found.")
+
 with st.expander("Advanced (experiments)", expanded=False):
     cq = st.text_input("Test query for chunking compare", value="What is ABFA allocation in 2024?")
     fq = st.text_input("Failure-case query", value="What is ABFA allocation trend?")

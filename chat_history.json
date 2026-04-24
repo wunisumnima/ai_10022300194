@@ -1,0 +1,52 @@
+[
+  {
+    "role": "user",
+    "content": "Test query for integration testing",
+    "timestamp": "2026-04-24 12:10:34.881708"
+  },
+  {
+    "role": "assistant",
+    "content": "I could not find this in provided sources.",
+    "timestamp": "2026-04-24 12:10:40.758463"
+  },
+  {
+    "role": "user",
+    "content": "Test question",
+    "timestamp": "2026-04-24 12:13:50.742955"
+  },
+  {
+    "role": "assistant",
+    "content": "Test answer",
+    "timestamp": "2026-04-24 12:13:50.744711"
+  },
+  {
+    "role": "user",
+    "content": "Who region won in 2020 and which president",
+    "timestamp": "2026-04-24 12:31:13.660857"
+  },
+  {
+    "role": "assistant",
+    "content": "Nana Akufo Addo (NPP) won with 6,776,066 votes [Ghana_Election_Result.csv, computed].",
+    "timestamp": "2026-04-24 12:31:15.018694"
+  },
+  {
+    "role": "user",
+    "content": "What were the election results in Ashanti Region?",
+    "timestamp": "2026-04-24 12:34:59.834975"
+  },
+  {
+    "role": "assistant",
+    "content": "Ashanti Region (no change) 2020 election results: \n* Percival Kofi Akpaloo (LPG) - 712 votes [Ghana_Election_Result.csv, chunk_id=Ghana_Election_Result-row17-fixed-0]",
+    "timestamp": "2026-04-24 12:35:01.643243"
+  },
+  {
+    "role": "user",
+    "content": "who won in Ashanti Region in 2020",
+    "timestamp": "2026-04-24 12:38:14.077098"
+  },
+  {
+    "role": "assistant",
+    "content": "Nana Akufo Addo (NPP) won in Ashanti Region (no change) in 2020 [Ghana_Election_Result.csv, computed].",
+    "timestamp": "2026-04-24 12:38:17.407463"
+  }
+]

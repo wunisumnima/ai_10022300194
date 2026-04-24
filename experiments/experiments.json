@@ -1,0 +1,44 @@
+{
+  "exp_20260424_120438_0": {
+    "id": "exp_20260424_120438_0",
+    "name": "Streamlit Test",
+    "description": "Testing experiment from UI",
+    "parameters": {
+      "ui_test": true
+    },
+    "results": {
+      "test_metric": 42
+    },
+    "created_at": "2026-04-24 12:04:38.378816",
+    "status": "completed"
+  },
+  "exp_20260424_120942_1": {
+    "id": "exp_20260424_120942_1",
+    "name": "Test Experiment",
+    "description": "Testing experiment functionality",
+    "parameters": {
+      "test_param": "test_value",
+      "number_param": 42
+    },
+    "results": {
+      "metric1": 100,
+      "metric2": "test_result",
+      "processing_time": 1.5
+    },
+    "created_at": "2026-04-24 12:09:42.439417",
+    "status": "completed"
+  },
+  "exp_20260424_121350_2": {
+    "id": "exp_20260424_121350_2",
+    "name": "Verification Test",
+    "description": "Testing experiment features",
+    "parameters": {
+      "test": true
+    },
+    "results": {
+      "test_metric": 42
+    },
+    "created_at": "2026-04-24 12:13:50.737691",
+    "status": "completed"
+  }
+}

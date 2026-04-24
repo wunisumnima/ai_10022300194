@@ -56,6 +56,33 @@ class DocumentChunk:
     metadata: Dict[str, str] = field(default_factory=dict)
 
 
+@dataclass
+class ChatMessage:
+    role: str  # "user" or "assistant"
+    content: str
+    timestamp: str = field(default_factory=lambda: str(datetime.now()))
+
+
+@dataclass
+class Experiment:
+    id: str
+    name: str
+    description: str
+    parameters: Dict[str, any]
+    results: Dict[str, any]
+    created_at: str = field(default_factory=lambda: str(datetime.now()))
+    status: str = "active"  # active, completed, failed
+
+
+@dataclass
+class ManualLog:
+    timestamp: str
+    level: str  # INFO, WARNING, ERROR, DEBUG
+    message: str
+    category: str = "general"
+    experiment_id: Optional[str] = None
+
+
 def normalize_text(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
@@ -104,6 +131,106 @@ def split_structure_aware(text: str, max_words: int = 500, overlap: int = 80) ->
         piece = split_fixed(section_text, chunk_size=max_words, overlap=overlap)
         chunked.extend(piece)
     return chunked
+
+
+class LogManager:
+    def __init__(self, log_dir: str = "logs"):
+        self.log_dir = Path(log_dir)
+        self.log_dir.mkdir(exist_ok=True)
+        self.logs: List[ManualLog] = []
+        
+    def add_log(self, level: str, message: str, category: str = "general", experiment_id: Optional[str] = None):
+        """Add a manual log entry"""
+        log_entry = ManualLog(
+            timestamp=str(datetime.now()),
+            level=level.upper(),
+            message=message,
+            category=category,
+            experiment_id=experiment_id
+        )
+        self.logs.append(log_entry)
+        
+        # Save to JSON file
+        self.save_logs_to_file()
+    
+    def save_logs_to_file(self):
+        """Save logs to JSON file"""
+        logs_file = self.log_dir / "manual_logs.json"
+        logs_data = [log.__dict__ for log in self.logs]
+        with open(logs_file, 'w', encoding='utf-8') as f:
+            json.dump(logs_data, f, indent=2, ensure_ascii=False)
+    
+    def get_logs(self, category: Optional[str] = None, experiment_id: Optional[str] = None) -> List[ManualLog]:
+        """Get filtered logs"""
+        filtered_logs = self.logs
+        if category:
+            filtered_logs = [log for log in filtered_logs if log.category == category]
+        if experiment_id:
+            filtered_logs = [log for log in filtered_logs if log.experiment_id == experiment_id]
+        return filtered_logs
+    
+    def clear_logs(self):
+        """Clear all logs"""
+        self.logs = []
+        self.save_logs_to_file()
+
+
+class ExperimentManager:
+    def __init__(self, experiments_dir: str = "experiments"):
+        self.experiments_dir = Path(experiments_dir)
+        self.experiments_dir.mkdir(exist_ok=True)
+        self.experiments: Dict[str, Experiment] = {}
+        self.load_experiments()
+    
+    def create_experiment(self, name: str, description: str, parameters: Dict[str, any]) -> str:
+        """Create a new experiment"""
+        experiment_id = f"exp_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{len(self.experiments)}"
+        experiment = Experiment(
+            id=experiment_id,
+            name=name,
+            description=description,
+            parameters=parameters,
+            results={}
+        )
+        self.experiments[experiment_id] = experiment
+        self.save_experiments()
+        return experiment_id
+    
+    def update_experiment_results(self, experiment_id: str, results: Dict[str, any]):
+        """Update experiment results"""
+        if experiment_id in self.experiments:
+            self.experiments[experiment_id].results.update(results)
+            self.save_experiments()
+    
+    def complete_experiment(self, experiment_id: str, status: str = "completed"):
+        """Mark experiment as completed"""
+        if experiment_id in self.experiments:
+            self.experiments[experiment_id].status = status
+            self.save_experiments()
+    
+    def get_experiment(self, experiment_id: str) -> Optional[Experiment]:
+        """Get experiment by ID"""
+        return self.experiments.get(experiment_id)
+    
+    def list_experiments(self) -> List[Experiment]:
+        """List all experiments"""
+        return list(self.experiments.values())
+    
+    def save_experiments(self):
+        """Save experiments to JSON file"""
+        experiments_file = self.experiments_dir / "experiments.json"
+        experiments_data = {exp_id: exp.__dict__ for exp_id, exp in self.experiments.items()}
+        with open(experiments_file, 'w', encoding='utf-8') as f:
+            json.dump(experiments_data, f, indent=2, ensure_ascii=False)
+    
+    def load_experiments(self):
+        """Load experiments from JSON file"""
+        experiments_file = self.experiments_dir / "experiments.json"
+        if experiments_file.exists():
+            with open(experiments_file, 'r', encoding='utf-8') as f:
+                experiments_data = json.load(f)
+                for exp_id, exp_data in experiments_data.items():
+                    self.experiments[exp_id] = Experiment(**exp_data)
 
 
 class DocumentIngestor:
@@ -173,6 +300,32 @@ class DocumentIngestor:
             return out
         for i, row in enumerate(rows):
             row_text = " | ".join(f"{k}: {v}" for k, v in row.items() if v)
+            
+            # Extract region information for election data
+            metadata = {"doc_type": "csv", "row": str(i), "token_count": str(estimate_tokens(row_text))}
+            
+            # Check if this is election data with region information
+            if "election" in path.name.lower() or "region" in str(row).lower():
+                # Extract old and new region if available
+                if "Old Region" in row and "New Region" in row:
+                    metadata["old_region"] = row["Old Region"]
+                    metadata["new_region"] = row["New Region"]
+                    metadata["region_change"] = row["Old Region"] != row["New Region"]
+                elif "Region" in row:
+                    metadata["region"] = row["Region"]
+                
+                # Add other relevant election metadata
+                if "Year" in row:
+                    metadata["year"] = row["Year"]
+                if "Candidate" in row:
+                    metadata["candidate"] = row["Candidate"]
+                if "Party" in row:
+                    metadata["party"] = row["Party"]
+                if "Votes" in row:
+                    metadata["votes"] = row["Votes"]
+                if "Votes(%)" in row:
+                    metadata["votes_percentage"] = row["Votes(%)"]
+            
             parts = self._chunk_text(row_text, strategy)
             for idx, part in enumerate(parts):
                 out.append(
@@ -181,7 +334,7 @@ class DocumentIngestor:
                         text=part,
                         source=path.name,
                         strategy=strategy,
-                        metadata={"doc_type": "csv", "row": str(i), "token_count": str(estimate_tokens(part))},
+                        metadata=metadata,
                     )
                 )
         return out
@@ -263,14 +416,31 @@ class HybridRetriever:
 
 class PromptBuilder:
     @staticmethod
-    def build(query: str, retrieved: List[Dict[str, object]], max_context_chars: int = 6000) -> str:
+    def build(query: str, retrieved: List[Dict[str, object]], max_context_chars: int = 6000, history: str = "") -> str:
         context_blocks: List[str] = []
         total = 0
         for i, item in enumerate(retrieved, start=1):
             page = item["metadata"].get("page", "n/a")
+            
+            # Extract region information for display
+            region_info = ""
+            metadata = item["metadata"]
+            
+            # Add region context if available
+            if "old_region" in metadata and "new_region" in metadata:
+                if metadata["old_region"] != metadata["new_region"]:
+                    region_info = f" | Region: {metadata['old_region']} → {metadata['new_region']}"
+                else:
+                    region_info = f" | Region: {metadata['new_region']}"
+            elif "region" in metadata:
+                region_info = f" | Region: {metadata['region']}"
+            
+            # Add year if available (for election data)
+            year_info = f" | Year: {metadata['year']}" if "year" in metadata else ""
+            
             block = (
                 f"[{i}] source={item['source']} page={page} chunk_id={item['chunk_id']} "
-                f"score={item['combined_score']:.4f}\n{item['text']}\n"
+                f"score={item['combined_score']:.4f}{region_info}{year_info}\n{item['text']}\n"
             )
             if total + len(block) > max_context_chars:
                 break
@@ -278,18 +448,24 @@ class PromptBuilder:
             total += len(block)
 
         context = "\n".join(context_blocks)
-        return (
+        
+        prompt = (
             "You are an Academic City RAG assistant. Answer ONLY from the retrieved context below.\n"
             "Rules:\n"
             "- If a block starts with AGGREGATED NATIONAL TOTALS, use it as the authoritative answer for national vote totals / who had the most votes that year.\n"
+            "- For election data, ALWAYS include the region information in your answer (old region → new region if different).\n"
             "- Be clear and concise: short sentences or bullet points; aim under 120 words unless the question needs a small table.\n"
             "- No preamble (no 'Based on the context...'). Start with the direct answer.\n"
             "- Only if nothing in the context answers the question, reply exactly: I could not find this in provided sources.\n"
-            "- Cite each factual claim with [source filename, page or chunk id].\n\n"
-            f"Question:\n{query}\n\n"
-            f"Retrieved context:\n{context}\n\n"
-            "Answer:"
+            "- Cite each factual claim with [source filename, page or chunk id].\n"
         )
+        
+        if history:
+            prompt += f"\nConversation History:\n{history}\n"
+        
+        prompt += f"\nQuestion:\n{query}\n\nRetrieved context:\n{context}\n\nAnswer:"
+        
+        return prompt
 
 
 def _token_set(text: str) -> set:
@@ -361,6 +537,17 @@ class RAGChatbot:
         self.feedback_path = Path("logs/feedback.jsonl")
         self.experiment_path = Path("logs/experiments.jsonl")
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Enhanced logging and experiment tracking
+        self.log_manager = LogManager()
+        self.experiment_manager = ExperimentManager()
+        self.current_experiment_id: Optional[str] = None
+        self.session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        self.chat_history: List[ChatMessage] = []
+        
+        # Load existing chat history
+        self.load_chat_history()
+        
         self.ingestor = DocumentIngestor(docs_path=docs_path)
         self.chunks = self.ingestor.ingest(strategy=strategy)
         if not self.chunks:
@@ -369,6 +556,72 @@ class RAGChatbot:
         self.embeddings = self.embedder.encode([c.text for c in self.chunks])
         self.retriever = HybridRetriever(self.chunks, self.embeddings)
         self.generator = Generator()
+        
+        self.log_manager.add_log("INFO", f"RAGChatbot initialized with session ID: {self.session_id}", "system")
+
+    def load_chat_history(self) -> None:
+        """Load chat history from file"""
+        history_file = Path("chat_history.json")
+        if history_file.exists():
+            with open(history_file, 'r', encoding='utf-8') as f:
+                history_data = json.load(f)
+                self.chat_history = [ChatMessage(**msg) for msg in history_data]
+                self.log_manager.add_log("INFO", f"Loaded {len(self.chat_history)} messages from history", "chat")
+
+    def save_chat_history(self) -> None:
+        """Save chat history to file"""
+        history_file = Path("chat_history.json")
+        history_data = [msg.__dict__ for msg in self.chat_history]
+        with open(history_file, 'w', encoding='utf-8') as f:
+            json.dump(history_data, f, indent=2, ensure_ascii=False)
+
+    def add_to_history(self, role: str, content: str) -> None:
+        """Add a message to chat history"""
+        self.chat_history.append(ChatMessage(role=role, content=content))
+        # Keep only last 50 exchanges (100 messages) to manage memory
+        if len(self.chat_history) > 100:
+            self.chat_history = self.chat_history[-100:]
+        self.save_chat_history()
+        self.log_manager.add_log("INFO", f"Added {role} message to history", "chat")
+
+    def get_history_string(self, max_exchanges: int = 10) -> str:
+        """Get formatted chat history for context"""
+        if not self.chat_history:
+            return ""
+        
+        recent_history = self.chat_history[-(max_exchanges * 2):]  # Last N exchanges
+        history_lines = []
+        for msg in recent_history:
+            prefix = "User" if msg.role == "user" else "Assistant"
+            history_lines.append(f"{prefix}: {msg.content}")
+        
+        return "\n".join(history_lines)
+
+    def clear_history(self) -> None:
+        """Clear chat history"""
+        self.chat_history = []
+        self.save_chat_history()
+        self.log_manager.add_log("INFO", "Chat history cleared", "chat")
+
+    def start_experiment(self, name: str, description: str, parameters: Dict[str, any]) -> str:
+        """Start a new experiment"""
+        experiment_id = self.experiment_manager.create_experiment(name, description, parameters)
+        self.current_experiment_id = experiment_id
+        self.log_manager.add_log("INFO", f"Started experiment: {name} (ID: {experiment_id})", "experiment", experiment_id)
+        return experiment_id
+
+    def log_experiment_result(self, metric: str, value: any):
+        """Log experiment result"""
+        if self.current_experiment_id:
+            self.experiment_manager.update_experiment_results(self.current_experiment_id, {metric: value})
+            self.log_manager.add_log("INFO", f"Experiment result: {metric} = {value}", "experiment", self.current_experiment_id)
+
+    def end_experiment(self, status: str = "completed"):
+        """End current experiment"""
+        if self.current_experiment_id:
+            self.experiment_manager.complete_experiment(self.current_experiment_id, status)
+            self.log_manager.add_log("INFO", f"Experiment ended with status: {status}", "experiment", self.current_experiment_id)
+            self.current_experiment_id = None
 
     @staticmethod
     def answer_from_retrieval_only(retrieved: List[Dict[str, object]]) -> str:
@@ -386,6 +639,13 @@ class RAGChatbot:
 
     def query(self, user_query: str, include_pure_baseline: bool = False) -> Dict[str, object]:
         """include_pure_baseline=True runs a second LLM call (slower). Default False for faster UI."""
+        # Add user query to history
+        self.add_to_history("user", user_query)
+        
+        # Enhanced logging
+        start_time = datetime.now()
+        self.log_manager.add_log("INFO", f"Processing query: {user_query[:50]}...", "query")
+        
         t0 = time.perf_counter()
         cleaned_query = normalize_text(user_query)
         query_emb = self.embedder.encode([cleaned_query])
@@ -394,12 +654,20 @@ class RAGChatbot:
         retrieved = inject_election_aggregate(cleaned_query, retrieved, str(self.docs_path))
         retrieved = retrieved[: self.top_k]
         t2 = time.perf_counter()
-        prompt = PromptBuilder.build(cleaned_query, retrieved)
+        
+        # Include chat history in prompt if available
+        history = self.get_history_string(max_exchanges=5)
+        prompt = PromptBuilder.build(cleaned_query, retrieved, history=history)
+        
         t3 = time.perf_counter()
         answer = self.generator.complete(prompt)
         if isinstance(answer, str) and answer.startswith("No LLM key set"):
             answer = self.answer_from_retrieval_only(retrieved)
         t4 = time.perf_counter()
+        
+        # Add assistant answer to history
+        self.add_to_history("assistant", answer)
+        
         pure_llm_answer = ""
         t5 = t4
         if include_pure_baseline and self.generator.client is not None:
@@ -408,6 +676,9 @@ class RAGChatbot:
         elif include_pure_baseline:
             pure_llm_answer = "No Groq client for model-only baseline."
 
+        # Calculate performance metrics
+        total_time = (t5 - t0) * 1000
+        
         payload = {
             "timestamp": datetime.utcnow().isoformat(),
             "strategy": self.strategy,
@@ -422,9 +693,20 @@ class RAGChatbot:
                 "prompt": round((t3 - t2) * 1000, 2),
                 "generate_rag": round((t4 - t3) * 1000, 2),
                 "generate_pure_baseline_ms": round((t5 - t4) * 1000, 2) if include_pure_baseline else 0.0,
-                "total": round((t5 - t0) * 1000, 2),
+                "total": round(total_time, 2),
             },
         }
+        
+        # Enhanced logging with performance metrics
+        self.log_manager.add_log("INFO", f"Query processed in {total_time:.2f}ms, retrieved {len(retrieved)} docs", "query")
+        
+        # Log experiment results if experiment is active
+        if self.current_experiment_id:
+            self.log_experiment_result("processing_time_ms", total_time)
+            self.log_experiment_result("retrieved_docs", len(retrieved))
+            self.log_experiment_result("answer_length", len(answer))
+            self.log_experiment_result("strategy", self.strategy)
+        
         self._write_log(payload)
         return payload
 

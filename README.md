@@ -4,7 +4,7 @@ Name: `Sumnima Wuni`
 Index Number: `10022300194`
 
 Repository naming rule from question paper:
-- `ai_<index_number>`
+- `ai_10022300194`
 
 ## Project Overview
 

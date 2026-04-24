@@ -1,0 +1,44 @@
+[
+  {
+    "timestamp": "2026-04-24 12:36:57.098512",
+    "level": "INFO",
+    "message": "Loaded 8 messages from history",
+    "category": "chat",
+    "experiment_id": null
+  },
+  {
+    "timestamp": "2026-04-24 12:38:13.775191",
+    "level": "INFO",
+    "message": "RAGChatbot initialized with session ID: session_20260424_123657",
+    "category": "system",
+    "experiment_id": null
+  },
+  {
+    "timestamp": "2026-04-24 12:38:14.081318",
+    "level": "INFO",
+    "message": "Added user message to history",
+    "category": "chat",
+    "experiment_id": null
+  },
+  {
+    "timestamp": "2026-04-24 12:38:14.090031",
+    "level": "INFO",
+    "message": "Processing query: who won in Ashanti Region in 2020...",
+    "category": "query",
+    "experiment_id": null
+  },
+  {
+    "timestamp": "2026-04-24 12:38:17.411131",
+    "level": "INFO",
+    "message": "Added assistant message to history",
+    "category": "chat",
+    "experiment_id": null
+  },
+  {
+    "timestamp": "2026-04-24 12:38:17.420176",
+    "level": "INFO",
+    "message": "Query processed in 3313.85ms, retrieved 3 docs",
+    "category": "query",
+    "experiment_id": null
+  }
+]
